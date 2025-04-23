@@ -2,136 +2,138 @@ import streamlit as st
 import zipfile
 import pandas as pd
 import os
+import shutil
+import tempfile
 
-# Step 1: File Upload
-st.title("Vendor Tiering System")
-st.markdown("Upload the ZIP file containing the vendor rate bid data to process and tier the routes.")
+st.set_page_config(page_title="Vendor Tiering System", layout="wide")
+st.title("📦 Vendor Tiering System for JEJE")
 
-# Upload ZIP file
-uploaded_zip = st.file_uploader("Choose a ZIP file", type="zip")
+# --- SESSION STATE INIT ---
+for key in ["sheet_name", "combined_df", "tiered_df", "extract_dir", "sheet_names"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
-if uploaded_zip is not None:
-    # Save the uploaded file to the current working directory
-    temp_zip_path = "temp.zip"
-    with open(temp_zip_path, "wb") as f:
-        f.write(uploaded_zip.getbuffer())
+# --- SECTION 1: UPLOAD & READ SHEET NAMES ---
+st.header("1️⃣ Upload ZIP and Read Excel Sheet Names")
+uploaded_zip = st.file_uploader("Upload ZIP file containing vendor rate bids", type="zip")
 
-    # Extract ZIP file
-    extract_dir = "bid_data"  # Create this directory for extracted files
-    with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
+if uploaded_zip and st.button("🔍 Extract & Read Sheet Names"):
+    # Save zip to temp
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        tmp.write(uploaded_zip.read())
+        tmp_path = tmp.name
 
-    st.success("ZIP file extracted successfully!")
-
-    # Function to read the "ALL TP KKV" sheet from Excel files
-    def read_all_sheets(file_path):
+    # Remove old extracted folder
+    if os.path.exists("bid_data"):
         try:
-            xl = pd.ExcelFile(file_path)
-            if 'ALL TP KKV' in xl.sheet_names:
-                # Read with header=1 assuming the header is in the second row (index 1)
-                df = xl.parse('ALL TP KKV', header=1)
-                df['file_name'] = os.path.basename(file_path)
-                return df
-        except Exception as e:
-            st.error(f"Failed to read {file_path}: {e}")
-        return None
+            shutil.rmtree("bid_data")
+        except PermissionError:
+            st.warning("Please close any open Excel files and try again.")
+            st.stop()
 
-    # Step 2: Collect data from the ZIP file
-    all_data = [
-        read_all_sheets(os.path.join(root, file))
-        for root, _, files in os.walk(extract_dir)
-        for file in files if file.endswith(".xlsx")
-    ]
+    os.makedirs("bid_data", exist_ok=True)
 
-    all_data = [df for df in all_data if df is not None]
+    with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+        zip_ref.extractall("bid_data")
 
-    # Step 3: Combine data into a single DataFrame
-    combined_df = pd.concat(all_data, ignore_index=True)
+    st.session_state.extract_dir = "bid_data"
 
-    # Show preview of the combined data
-    st.subheader("Preview of Combined Data")
-    st.dataframe(combined_df.head())
+    # Scan for all unique sheet names
+    sheet_names = set()
+    for root, _, files in os.walk("bid_data"):
+        for file in files:
+            if file.endswith(".xlsx"):
+                try:
+                    with pd.ExcelFile(os.path.join(root, file)) as xls:
+                        sheet_names.update(xls.sheet_names)
+                except Exception as e:
+                    st.warning(f"Could not read {file}: {e}")
 
-    # Step 4: Check the column names to ensure correctness
-    st.subheader("Column Names in Data")
-    st.write(combined_df.columns)
+    st.session_state.sheet_names = sorted(list(sheet_names))
 
-    # Step 5: Process the relevant columns and reshape the DataFrame
-    relevant_cols = ['VENDOR', 'Origin City', 'Destination City', 'CDD', 'CDD LONG', 'CDE', 'CDE LONG', 'TRONTON WINGBOX', 'VAN BOX']
-    
-    # Check if relevant columns exist
-    if all(col in combined_df.columns for col in relevant_cols):
-        df = combined_df[relevant_cols].copy()
-    else:
-        st.error(f"Some of the relevant columns are missing: {set(relevant_cols) - set(combined_df.columns)}")
-        st.stop()
+if st.session_state.sheet_names:
+    st.session_state.sheet_name = st.selectbox("📄 Choose sheet to process", st.session_state.sheet_names)
 
-    # Melt the DataFrame to unpivot the truck types
-    melted_df = df.melt(
-        id_vars=['VENDOR', 'Origin City', 'Destination City'],
-        value_vars=['CDD', 'CDD LONG', 'CDE', 'CDE LONG', 'TRONTON WINGBOX', 'VAN BOX'],
-        var_name='truck_type',
-        value_name='price'
-    ).dropna(subset=['price'])
+# --- SECTION 2: GENERATE TIERING SYSTEM ---
+st.header("2️⃣ Generate Tiering System")
+if st.session_state.extract_dir and st.session_state.sheet_name:
+    if st.button("⚙️ Generate Tiering System"):
+        all_data = []
+        for root, _, files in os.walk(st.session_state.extract_dir):
+            for file in files:
+                if file.endswith(".xlsx"):
+                    try:
+                        file_path = os.path.join(root, file)
+                        with pd.ExcelFile(file_path) as xls:
+                            if st.session_state.sheet_name in xls.sheet_names:
+                                df = xls.parse(st.session_state.sheet_name, header=1)
+                                df["file_name"] = file
+                                all_data.append(df)
+                    except Exception as e:
+                        st.warning(f"Error reading {file}: {e}")
 
-    # Clean and rename columns
-    melted_df = melted_df.rename(columns={
-        'VENDOR': 'vendor',
-        'Origin City': 'origin_city',
-        'Destination City': 'destination_city'
-    })
+        if all_data:
+            combined_df = pd.concat(all_data, ignore_index=True)
+            st.session_state.combined_df = combined_df
 
-    melted_df['price'] = pd.to_numeric(melted_df['price'], errors='coerce')
-    melted_df = melted_df.dropna(subset=['price']).drop_duplicates()
+            # Run Tiering
+            df = combined_df.copy()
+            expected_cols = ['VENDOR', 'Origin City', 'Destination City', 'CDD', 'CDD LONG', 'CDE', 'CDE LONG', 'TRONTON WINGBOX', 'VAN BOX']
+            missing_cols = [col for col in expected_cols if col not in df.columns]
+            if missing_cols:
+                st.error(f"Missing required columns: {missing_cols}")
+            else:
+                df = df.melt(
+                    id_vars=['VENDOR', 'Origin City', 'Destination City'],
+                    value_vars=['CDD', 'CDD LONG', 'CDE', 'CDE LONG', 'TRONTON WINGBOX', 'VAN BOX'],
+                    var_name='truck_type',
+                    value_name='price'
+                ).dropna(subset=['price'])
 
-    # Step 6: Assign tiers based on price
-    def assign_tiers(df):
-        df = df.sort_values(by='price').copy()
-        price_to_tier = {price: f'Tier {i+1}' for i, price in enumerate(sorted(df['price'].unique()))}
-        df['tier'] = df['price'].map(price_to_tier)
-        return df
+                df = df.rename(columns={
+                    'VENDOR': 'vendor',
+                    'Origin City': 'origin_city',
+                    'Destination City': 'destination_city'
+                })
 
-    # Apply tier assignment
-    tiered_df = melted_df.groupby(['truck_type', 'origin_city', 'destination_city'], group_keys=False).apply(assign_tiers)
+                df['price'] = pd.to_numeric(df['price'], errors='coerce')
+                df = df.dropna(subset=['price']).drop_duplicates()
 
-    # Reorder columns for display
-    tiered_df = tiered_df[['truck_type', 'origin_city', 'destination_city', 'vendor', 'price', 'tier']]
+                def assign_tiers(group):
+                    group = group.sort_values(by="price").copy()
+                    group["tier"] = ["Tier " + str(i + 1) for i in range(len(group))]
+                    return group
 
-    # Step 7: Filter by Vendor, Origin, or Destination City
-    st.sidebar.header("Filters")
+                tiered_df = df.groupby(
+                    ['truck_type', 'origin_city', 'destination_city'],
+                    group_keys=False
+                ).apply(assign_tiers)
 
-    vendors = tiered_df['vendor'].unique()
-    selected_vendor = st.sidebar.selectbox("Select Vendor", ["All Vendors"] + list(vendors))
+                st.session_state.tiered_df = tiered_df[['truck_type', 'origin_city', 'destination_city', 'vendor', 'price', 'tier']]
+                st.success("✅ Tiering system generated successfully!")
 
-    origin_cities = tiered_df['origin_city'].unique()
-    selected_origin = st.sidebar.selectbox("Select Origin City", ["All Cities"] + list(origin_cities))
+# --- SECTION 3: DISPLAY & DOWNLOAD ---
+if st.session_state.tiered_df is not None:
+    st.header("📊 Tiered Vendor Data Preview")
 
-    destination_cities = tiered_df['destination_city'].unique()
-    selected_destination = st.sidebar.selectbox("Select Destination City", ["All Cities"] + list(destination_cities))
+    df = st.session_state.tiered_df
+    vendor_filter = st.selectbox("🔎 Filter by Vendor", ["All"] + sorted(df["vendor"].unique()))
+    origin_filter = st.selectbox("📍 Filter by Origin City", ["All"] + sorted(df["origin_city"].unique()))
+    destination_filter = st.selectbox("🎯 Filter by Destination City", ["All"] + sorted(df["destination_city"].unique()))
 
-    # Apply filters
-    filtered_df = tiered_df
-    if selected_vendor != "All Vendors":
-        filtered_df = filtered_df[filtered_df['vendor'] == selected_vendor]
-    if selected_origin != "All Cities":
-        filtered_df = filtered_df[filtered_df['origin_city'] == selected_origin]
-    if selected_destination != "All Cities":
-        filtered_df = filtered_df[filtered_df['destination_city'] == selected_destination]
+    filtered_df = df.copy()
+    if vendor_filter != "All":
+        filtered_df = filtered_df[filtered_df["vendor"] == vendor_filter]
+    if origin_filter != "All":
+        filtered_df = filtered_df[filtered_df["origin_city"] == origin_filter]
+    if destination_filter != "All":
+        filtered_df = filtered_df[filtered_df["destination_city"] == destination_filter]
 
-    # Display the filtered data first
-    st.subheader("Filtered Tiered Data")
     st.dataframe(filtered_df)
 
-    # Step 8: Display Tiered Data at the bottom
-    st.subheader("Tiered Vendor Data")
-    st.dataframe(tiered_df)
-
-    # Step 9: Download the filtered data
-    st.subheader("Download Filtered Data")
-    csv = filtered_df.to_csv(index=False)
     st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name="filtered_vendor_data.csv",
+        label="⬇️ Download Filtered CSV",
+        data=filtered_df.to_csv(index=False),
+        file_name="tiered_vendor_data.csv",
         mime="text/csv"
     )
