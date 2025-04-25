@@ -259,10 +259,10 @@ if st.session_state.tiered_df is not None:
     if destination_filter != "All":
         filtered_df = filtered_df[filtered_df["destination_city"] == destination_filter]
 
-    # Rename columns and reorder them
     # Reset the index to exclude the index column from the CSV
     filtered_df = filtered_df.reset_index(drop=True)
 
+    # Rename columns and reorder them
     filtered_df = filtered_df.rename(columns={
         "origin_city": "Origin",
         "destination_city": "Destination",
@@ -284,7 +284,7 @@ if st.session_state.tiered_df is not None:
     # Download button for the filtered CSV
     st.download_button(
         label="⬇️ Download Filtered CSV",
-        data=filtered_df.to_csv(index=False),
+        data=filtered_df.to_csv(index=False),  # Ensure index is excluded
         file_name="tiered_vendor_data.csv",
         mime="text/csv"
     )
