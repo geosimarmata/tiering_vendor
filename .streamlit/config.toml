@@ -1,0 +1,7 @@
+[theme]
+base = "light"  # Set the base theme to light
+primaryColor = "#F97316"  # Set the primary color (orange)
+backgroundColor = "#FFFFFF"  # Set the background color (white)
+secondaryBackgroundColor = "#F5F5F5"  # Set the secondary background color (light gray)
+textColor = "#333333"  # Set the text color (dark gray)
+font = "sans serif"  # Set the font to sans serif
