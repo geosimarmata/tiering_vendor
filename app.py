@@ -260,6 +260,9 @@ if st.session_state.tiered_df is not None:
         filtered_df = filtered_df[filtered_df["destination_city"] == destination_filter]
 
     # Rename columns and reorder them
+    # Reset the index to exclude the index column from the CSV
+    filtered_df = filtered_df.reset_index(drop=True)
+
     filtered_df = filtered_df.rename(columns={
         "origin_city": "Origin",
         "destination_city": "Destination",
