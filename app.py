@@ -19,6 +19,13 @@ st.markdown(
         background: linear-gradient(to bottom, #F27F30, #F97316, #CF3331);  /* Smooth gradient */
         color: white;
     }
+    
+    <style>
+    /* Hide Streamlit menu (three dots) */
+    #MainMenu {visibility: hidden;}
+
+    /* Hide Streamlit footer (GitHub logo and fork button) */
+    footer {visibility: hidden;}    
 
     /* Extract button (blue) */
     div.stButton > button:first-of-type {
@@ -79,12 +86,6 @@ st.markdown(
     }
     </style>
     
-    /* Hide Streamlit menu (three dots) */
-    #MainMenu {visibility: hidden;}
-
-    /* Hide Streamlit footer (GitHub logo and fork button) */
-    footer {visibility: hidden;}
-    </style>
     """,
     unsafe_allow_html=True
 )
