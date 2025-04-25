@@ -1,7 +1,4 @@
-# 
-# This is next model after test.py.
-# This model more robutst to generate tiering system for manny Shipper like OH!SOME, SPX FTL, LOTTE.
-# This model also can generate tiering system for all shipper in one click.
+# The Revised Little from app.py
 
 import streamlit as st
 import zipfile
@@ -221,15 +218,21 @@ if st.session_state.extract_dir and st.session_state.sheet_name:
                 df = df.dropna(subset=['price']).drop_duplicates()
 
                 def assign_tiers(group):
-                    # Sort by price
-                    group = group.sort_values(by="price").copy()
-                    
-                    # Assign tiers based on unique prices
-                    unique_prices = group["price"].unique()
+                    # Separate rows where the vendor is "SJL/JHT"
+                    sjl_jht_rows = group[group["vendor"].str.contains("SJL|JHT", case=False, na=False)].copy()
+                    other_rows = group[~group["vendor"].str.contains("SJL|JHT", case=False, na=False)].copy()
+
+                    # Assign Tier 0 to SJL/JHT rows
+                    sjl_jht_rows["tier"] = "Tier 0"
+
+                    # Sort other rows by price and assign tiers starting from Tier 1
+                    other_rows = other_rows.sort_values(by="price").copy()
+                    unique_prices = other_rows["price"].unique()
                     price_to_tier = {price: f"Tier {i + 1}" for i, price in enumerate(unique_prices)}
-                    group["tier"] = group["price"].map(price_to_tier)
-                    
-                    return group
+                    other_rows["tier"] = other_rows["price"].map(price_to_tier)
+
+                    # Combine the two DataFrames back together
+                    return pd.concat([sjl_jht_rows, other_rows], ignore_index=True)
 
                 tiered_df = df.groupby(
                     ['truck_type', 'origin_city', 'destination_city'],
