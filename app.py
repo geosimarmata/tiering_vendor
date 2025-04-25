@@ -78,6 +78,13 @@ st.markdown(
         padding: 1em;
     }
     </style>
+    
+    /* Hide Streamlit menu (three dots) */
+    #MainMenu {visibility: hidden;}
+
+    /* Hide Streamlit footer (GitHub logo and fork button) */
+    footer {visibility: hidden;}
+    </style>
     """,
     unsafe_allow_html=True
 )
