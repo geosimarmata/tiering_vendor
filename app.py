@@ -279,9 +279,10 @@ if st.session_state.tiered_df is not None:
         "destination_city": "Destination",
         "price": "Transport Price",
         "vendor": "Transporter",
-        "tier": "Tiering"
+        "tier": "Tiering",
+        "truck_type": "Type Truck"
     })
-    filtered_df = filtered_df[["Origin", "Destination", "Transport Price", "Transporter", "Tiering"]]
+    filtered_df = filtered_df[["Type Truck", "Origin", "Destination", "Transport Price", "Transporter", "Tiering"]]
 
     # Add a "Status" column with the value "Active" (can be commented out if not needed)
     filtered_df["Status"] = "Active"
