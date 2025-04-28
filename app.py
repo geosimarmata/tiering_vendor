@@ -152,7 +152,7 @@ else:
 
 if uploaded_zip and st.session_state.sheet_names:  # Only show the select box if sheets are loaded
     if filtered_sheet_names:
-        st.session_state.sheet_name = st.sidebar.selectbox("📄 Select Sheet to Process", filtered_sheet_names)
+        st.session_state.sheet_name = st.sidebar.selectbox("📄 Select Shipper", filtered_sheet_names)
     else:
         # Display a warning with the file names that were processed
         st.warning(
@@ -178,6 +178,7 @@ if st.session_state.extract_dir and st.session_state.sheet_name:
                         if st.session_state.sheet_name in xls.sheet_names:
                             df = xls.parse(st.session_state.sheet_name, header=1)
                             df["file_name"] = os.path.basename(file_path)
+                            df["shipper"] = st.session_state.sheet_name
                             all_data.append(df)
                 except Exception as e:
                     st.warning(f"Error reading {os.path.basename(file_path)}: {e}")
@@ -210,7 +211,7 @@ if st.session_state.extract_dir and st.session_state.sheet_name:
             else:
                 # Reshape the data based on detected truck types
                 df = df.melt(
-                    id_vars=id_columns,
+                    id_vars=id_columns + ['shipper'],
                     value_vars=truck_type_columns,
                     var_name='truck_type',
                     value_name='price'
@@ -247,7 +248,7 @@ if st.session_state.extract_dir and st.session_state.sheet_name:
                     group_keys=False
                 ).apply(assign_tiers)
 
-                st.session_state.tiered_df = tiered_df[['truck_type', 'origin_city', 'destination_city', 'vendor', 'price', 'tier']]
+                st.session_state.tiered_df = tiered_df[['shipper', 'truck_type', 'origin_city', 'destination_city', 'vendor', 'price', 'tier']]
                 st.success("✅ Tiering system generated!")
         
         
@@ -280,9 +281,10 @@ if st.session_state.tiered_df is not None:
         "price": "Transport Price",
         "vendor": "Transporter",
         "tier": "Tiering",
-        "truck_type": "Type Truck"
+        "truck_type": "Type Truck",
+        'shipper': 'Shipper'
     })
-    filtered_df = filtered_df[["Type Truck", "Origin", "Destination", "Transport Price", "Transporter", "Tiering"]]
+    filtered_df = filtered_df[['Shipper', "Type Truck", "Origin", "Destination", "Transport Price", "Transporter", "Tiering"]]
 
     # Add a "Status" column with the value "Active" (can be commented out if not needed)
     filtered_df["Status"] = "Active"
