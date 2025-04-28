@@ -295,7 +295,7 @@ if st.session_state.tiered_df is not None:
 
     # Download button for the filtered CSV
     st.download_button(
-        label="⬇️ Download Filtered CSV",
+        label="⬇️ Download Tiered Vendor Data",
         data=filtered_df.to_csv(index=False),  # Ensure index is excluded
         file_name="tiered_vendor_data.csv",
         mime="text/csv"
